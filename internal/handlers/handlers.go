@@ -1,5 +1,3 @@
-//internal/handlers/handlers.go
-
 package handlers
 
 import (
@@ -56,8 +54,6 @@ func New(db *gorm.DB, a *auth.Service, kv *vault.KeyVault,
 	}
 }
 
-// translatePath converts an absolute path written by the Python container
-// into the equivalent path accessible by the Go container via the shared volume.
 func (h *Handler) translatePath(pyPath string) string {
 	if pyPath == "" {
 		return ""
@@ -87,7 +83,6 @@ func currentUser(r *http.Request) *models.User {
 
 func ip(r *http.Request) string { return r.RemoteAddr }
 
-// readFileAsBase64 reads a file from disk and returns a data URI string.
 func readFileAsBase64(path string) string {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -100,7 +95,6 @@ func readFileAsBase64(path string) string {
 	return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data)
 }
 
-// clampInt returns n clamped to [0, max].
 func clampInt(n, max int) int {
 	if n < 0 {
 		return 0
@@ -111,18 +105,17 @@ func clampInt(n, max int) int {
 	return n
 }
 
-// hashBytes returns the hex SHA-256 of b.
 func hashBytes(b []byte) string {
 	sum := sha256.Sum256(b)
 	return fmt.Sprintf("%x", sum)
 }
 
-// vaultPayload is the structure stored (encrypted) in the key vault.
 type vaultPayload struct {
 	RList      json.RawMessage `json:"r_list"`
 	NumSecrets int             `json:"num_secrets"`
 	JobID      string          `json:"job_id"`
-	StegoHash  string          `json:"stego_hash"` // SHA-256 of stego PNG bytes at conceal time
+	StegoHash  string          `json:"stego_hash"`
+	StegoB64   string          `json:"stego_b64,omitempty"`
 }
 
 // ── Health ────────────────────────────────────────────────────
@@ -133,7 +126,6 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 
 // ── Auth ──────────────────────────────────────────────────────
 
-// registerErr: validation problems -> 400 with the reason, everything else -> 409.
 func (h *Handler) registerErr(w http.ResponseWriter, err error) {
 	var ve *auth.ValidationError
 	if errors.As(err, &ve) {
@@ -220,11 +212,6 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 	h.json(w, 200, currentUser(r))
 }
 
-// BecomeSender lets a receiver self-upgrade to the sender role, without
-// admin involvement. One-way only: it refuses if the caller isn't currently
-// a plain receiver, so it can't be used to move sender->receiver, and there
-// is no companion "become receiver" endpoint — reverting still requires an
-// admin via UpdateUserRole.
 func (h *Handler) BecomeSender(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)
 	if u.Role != "receiver" {
@@ -269,7 +256,6 @@ func (h *Handler) Conceal(w http.ResponseWriter, r *http.Request) {
 	job := models.StegoJob{ID: jobID, OwnerID: u.ID, Operation: "conceal", Status: "pending"}
 	h.db.Create(&job)
 
-	// Build multipart body to forward to Python
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
 
@@ -292,7 +278,6 @@ func (h *Handler) Conceal(w http.ResponseWriter, r *http.Request) {
 	}
 	mw.Close()
 
-	// Call Python inference service
 	resp, err := http.Post(h.pythonURL+"/conceal", mw.FormDataContentType(), &buf)
 	if err != nil {
 		h.db.Model(&job).Updates(map[string]any{"status": "failed", "error_msg": err.Error()})
@@ -302,13 +287,19 @@ func (h *Handler) Conceal(w http.ResponseWriter, r *http.Request) {
 	defer resp.Body.Close()
 
 	var pyRes struct {
-		StegoPath    string  `json:"stego_path"`
-		RListPath    string  `json:"r_list_path"`
-		TextureScore float64 `json:"texture_score"`
-		NumSecrets   int     `json:"num_secrets"`
-		Error        string  `json:"error"`
+		StegoPath    string          `json:"stego_path"`
+		StegoB64     string          `json:"stego_b64"`
+		RList        json.RawMessage `json:"r_list"`
+		RListPath    string          `json:"r_list_path"`
+		TextureScore float64         `json:"texture_score"`
+		NumSecrets   int             `json:"num_secrets"`
+		StegoHash    string          `json:"stego_hash"`
+		Error        string          `json:"error"`
 	}
-	json.NewDecoder(resp.Body).Decode(&pyRes)
+	if err := json.NewDecoder(resp.Body).Decode(&pyRes); err != nil {
+		h.err(w, 500, "failed to decode Python response: "+err.Error())
+		return
+	}
 
 	if pyRes.Error != "" {
 		h.db.Model(&job).Updates(map[string]any{"status": "failed", "error_msg": pyRes.Error})
@@ -316,31 +307,44 @@ func (h *Handler) Conceal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Read the r_list JSON file from the shared volume
-	localRListPath := h.translatePath(pyRes.RListPath)
-	rListBytes, err := os.ReadFile(localRListPath)
-	if err != nil {
-		h.err(w, 500, "failed to read key file from shared volume")
-		return
+	// Read key data (prioritize direct HTTP payload over shared volume)
+	var rListBytes []byte
+	if len(pyRes.RList) > 0 {
+		rListBytes = pyRes.RList
+	} else {
+		localRListPath := h.translatePath(pyRes.RListPath)
+		var readErr error
+		rListBytes, readErr = os.ReadFile(localRListPath)
+		if readErr != nil {
+			h.err(w, 500, "failed to read key data: "+readErr.Error())
+			return
+		}
+		defer os.Remove(localRListPath)
 	}
-	defer os.Remove(localRListPath)
 
-	// Read stego bytes and compute SHA-256 — used to verify uploads at reveal time.
-	// Use local var `sum`, never shadow the Handler receiver `h`.
-	stegoLocalPath := h.translatePath(pyRes.StegoPath)
-	stegoData, readErr := os.ReadFile(stegoLocalPath)
-	if readErr != nil {
-		h.err(w, 500, "failed to read stego file from shared volume")
-		return
+	// Obtain stego base64 and hash
+	var stegoHash string
+	var stegoB64 string
+	if pyRes.StegoB64 != "" {
+		stegoB64 = pyRes.StegoB64
+		stegoHash = pyRes.StegoHash
+	} else {
+		stegoLocalPath := h.translatePath(pyRes.StegoPath)
+		stegoData, readErr := os.ReadFile(stegoLocalPath)
+		if readErr != nil {
+			h.err(w, 500, "failed to read stego file: "+readErr.Error())
+			return
+		}
+		stegoHash = hashBytes(stegoData)
+		stegoB64 = "data:image/png;base64," + base64.StdEncoding.EncodeToString(stegoData)
 	}
-	stegoHash := hashBytes(stegoData)
 
-	// Build and encrypt the vault payload — includes job_id and stego_hash
 	payload, err := json.Marshal(vaultPayload{
 		RList:      json.RawMessage(rListBytes),
 		NumSecrets: secretCount,
 		JobID:      jobID,
 		StegoHash:  stegoHash,
+		StegoB64:   stegoB64,
 	})
 	if err != nil {
 		h.err(w, 500, "failed to encode vault payload")
@@ -364,8 +368,6 @@ func (h *Handler) Conceal(w http.ResponseWriter, r *http.Request) {
 		fmt.Sprintf(`{"job_id":"%s","secrets":%d}`, jobID, secretCount),
 		ip(r), r.UserAgent())
 
-	stegoB64 := "data:image/png;base64," + base64.StdEncoding.EncodeToString(stegoData)
-
 	h.json(w, 200, map[string]any{
 		"job_id":          jobID,
 		"key_id":          keyID,
@@ -387,14 +389,12 @@ func (h *Handler) Reveal(w http.ResponseWriter, r *http.Request) {
 	}
 	keyID := r.FormValue("key_id")
 
-	// Decrypt vault payload
 	vaultBytes, err := h.vault.Retrieve(keyID, u.ID)
 	if err != nil {
 		h.err(w, 403, err.Error())
 		return
 	}
 
-	// Unwrap vault payload — handle legacy format (raw r_list, no wrapper)
 	var payload vaultPayload
 	if jsonErr := json.Unmarshal(vaultBytes, &payload); jsonErr != nil {
 		payload.RList = json.RawMessage(vaultBytes)
@@ -404,7 +404,6 @@ func (h *Handler) Reveal(w http.ResponseWriter, r *http.Request) {
 	}
 	numSecrets := payload.NumSecrets
 
-	// ── Read stego image bytes once — used for verification and forwarding
 	stegoFileHandle, stegoHeader, err := r.FormFile("stego")
 	if err != nil {
 		h.err(w, 400, "stego image required")
@@ -417,20 +416,10 @@ func (h *Handler) Reveal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ── Stego verification ────────────────────────────────────────────────────
-	//
-	// Strategy 1: Compare against hash stored in vault payload (new jobs).
-	// Strategy 2: Compare against stego file on disk via job_id (all jobs).
-	// Strategy 3: Fall back to DB lookup via key record → conceal job stego path.
-	//
-	// We always reject if we CAN verify and it fails.
-	// We only skip if the stego file is genuinely gone from disk AND no hash exists.
-
 	uploadedHash := hashBytes(stegoBytes)
 	verified := false
 	canVerify := false
 
-	// Strategy 1 — hash in vault payload (new jobs)
 	if payload.StegoHash != "" {
 		canVerify = true
 		if uploadedHash == payload.StegoHash {
@@ -438,7 +427,6 @@ func (h *Handler) Reveal(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Strategy 2 — job_id in vault payload → read stego from disk
 	if !verified && payload.JobID != "" {
 		var concealJob models.StegoJob
 		if dbErr := h.db.Where("id = ? AND operation = 'conceal'", payload.JobID).
@@ -453,25 +441,6 @@ func (h *Handler) Reveal(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Strategy 3 — look up job via key record (covers legacy jobs with no job_id in payload)
-	if !verified && payload.JobID == "" {
-		var keyRec models.KeyRecord
-		if dbErr := h.db.Where("id = ?", keyID).First(&keyRec).Error; dbErr == nil {
-			var concealJob models.StegoJob
-			if dbErr2 := h.db.Where("id = ? AND operation = 'conceal'", keyRec.JobID).
-				First(&concealJob).Error; dbErr2 == nil && concealJob.StegoPath != "" {
-				storedPath := h.translatePath(concealJob.StegoPath)
-				if storedData, readErr := os.ReadFile(storedPath); readErr == nil {
-					canVerify = true
-					if uploadedHash == hashBytes(storedData) {
-						verified = true
-					}
-				}
-			}
-		}
-	}
-
-	// Reject if we could verify but it failed
 	if canVerify && !verified {
 		h.audit.Log(r.Context(), u.ID, "REVEAL_REJECTED",
 			fmt.Sprintf(`{"key_id":"%s","reason":"stego_mismatch"}`, keyID),
@@ -479,25 +448,12 @@ func (h *Handler) Reveal(w http.ResponseWriter, r *http.Request) {
 		h.err(w, 403, "stego image does not match this key — wrong image uploaded")
 		return
 	}
-	// If canVerify=false, the stego file is gone from disk and no hash was stored —
-	// we allow the reveal since the encrypted key itself proves authorization.
 
 	jobID := uuid.New().String()
 	job := models.StegoJob{ID: jobID, OwnerID: u.ID, Operation: "reveal", Status: "pending"}
 	h.db.Create(&job)
 
-	// Write r_list to shared volume so Python reads it directly (avoids HTTP size limits)
-	rListFilename := fmt.Sprintf("r_list_%s.json", jobID)
-	localRListPath := h.outputDir + "/" + rListFilename
-	pyRListPath := h.pyOutputDir + "/" + rListFilename
-
-	if err := os.WriteFile(localRListPath, []byte(payload.RList), 0644); err != nil {
-		h.err(w, 500, "failed to write key to shared volume")
-		return
-	}
-	defer os.Remove(localRListPath)
-
-	// Build multipart body for Python — stego bytes + r_list path
+	// Build multipart body for Python — send stego bytes and raw r_list over HTTP
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
 
@@ -507,7 +463,9 @@ func (h *Handler) Reveal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fw.Write(stegoBytes)
-	mw.WriteField("r_list_path", pyRListPath)
+
+	// Pass r_list directly as a form field
+	mw.WriteField("r_list", string(payload.RList))
 	mw.Close()
 
 	resp, err := http.Post(h.pythonURL+"/reveal", mw.FormDataContentType(), &buf)
@@ -520,7 +478,6 @@ func (h *Handler) Reveal(w http.ResponseWriter, r *http.Request) {
 
 	bodyBytes, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
-		fmt.Println("🚨 PYTHON REVEAL ERROR:", string(bodyBytes))
 		h.db.Model(&job).Updates(map[string]any{"status": "failed", "error_msg": string(bodyBytes)})
 		h.err(w, resp.StatusCode, "Python Error: "+string(bodyBytes))
 		return
@@ -528,9 +485,11 @@ func (h *Handler) Reveal(w http.ResponseWriter, r *http.Request) {
 
 	var pyRes struct {
 		CoverPath    string    `json:"cover_path"`
+		CoverB64     string    `json:"cover_b64"`
 		StegoPSNR    float64   `json:"stego_psnr"`
 		StegoMSE     float64   `json:"stego_mse"`
 		SecretsPaths []string  `json:"secrets_paths"`
+		SecretsB64   []string  `json:"secrets_b64"`
 		PSNRScores   []float64 `json:"psnr_scores"`
 		SSIMScores   []float64 `json:"ssim_scores"`
 		Error        string    `json:"error"`
@@ -549,10 +508,12 @@ func (h *Handler) Reveal(w http.ResponseWriter, r *http.Request) {
 		fmt.Sprintf(`{"job_id":"%s","key_id":"%s"}`, jobID, keyID),
 		ip(r), r.UserAgent())
 
-	// Determine real secret count
 	totalFromPython := len(pyRes.SecretsPaths)
+	if totalFromPython == 0 && len(pyRes.SecretsB64) > 0 {
+		totalFromPython = len(pyRes.SecretsB64)
+	}
+
 	if numSecrets <= 0 {
-		// Look up from DB if not stored in vault payload (legacy jobs)
 		var keyRec models.KeyRecord
 		if dbErr := h.db.Where("id = ?", keyID).First(&keyRec).Error; dbErr == nil {
 			var concealJob models.StegoJob
@@ -568,8 +529,6 @@ func (h *Handler) Reveal(w http.ResponseWriter, r *http.Request) {
 
 	n := clampInt(numSecrets, totalFromPython)
 
-	// Slice to exactly n — padding images are silently dropped
-	secretPaths := pyRes.SecretsPaths[:n]
 	psnrScores := pyRes.PSNRScores
 	if len(psnrScores) > n {
 		psnrScores = psnrScores[:n]
@@ -579,10 +538,21 @@ func (h *Handler) Reveal(w http.ResponseWriter, r *http.Request) {
 		ssimScores = ssimScores[:n]
 	}
 
-	coverB64 := readFileAsBase64(h.translatePath(pyRes.CoverPath))
+	// Read cover image (prefer HTTP base64 over file read)
+	coverB64 := pyRes.CoverB64
+	if coverB64 == "" {
+		coverB64 = readFileAsBase64(h.translatePath(pyRes.CoverPath))
+	}
+
+	// Read recovered secrets (prefer HTTP base64 over file read)
 	secretsB64 := make([]string, n)
-	for i, path := range secretPaths {
-		secretsB64[i] = readFileAsBase64(h.translatePath(path))
+	if len(pyRes.SecretsB64) >= n {
+		copy(secretsB64, pyRes.SecretsB64[:n])
+	} else {
+		secretPaths := pyRes.SecretsPaths[:n]
+		for i, path := range secretPaths {
+			secretsB64[i] = readFileAsBase64(h.translatePath(path))
+		}
 	}
 
 	h.json(w, 200, map[string]any{

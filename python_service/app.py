@@ -1,5 +1,3 @@
-#python_service/app.py
-
 """
 DeepMIH Python Inference Service
 - Runs entirely on CPU (no NVIDIA toolkit needed)
@@ -11,6 +9,7 @@ DeepMIH Python Inference Service
 import os
 import io
 import json
+import base64
 import hashlib
 import uuid
 import logging
@@ -24,10 +23,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 # ── Force CPU ────────────────────────────────────────────────
-# On an i3 with no CUDA, this is always the case anyway,
-# but being explicit prevents accidental GPU attempts.
 DEVICE = torch.device("cpu")
-torch.set_num_threads(os.cpu_count() or 4)   # use all cores on i3
+# Bound PyTorch CPU threads to 1-2 to prevent thread contention on throttled free-tier vCPUs
+torch.set_num_threads(int(os.getenv("OMP_NUM_THREADS", "1")))
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
 log = logging.getLogger("defense")
@@ -41,15 +39,6 @@ NUM_SECRETS  = int(os.getenv("NUM_SECRETS", "5"))
 TEXTURE_MIN  = float(os.getenv("TEXTURE_MIN", "50.0"))
 OUTPUT_DIR   = Path(os.getenv("OUTPUT_DIR", "/tmp/defense_outputs"))
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-
-# ════════════════════════════════════════════════════════════
-# MODEL DEFINITION
-# Must match exactly what you trained on Kaggle.
-# If you used the aligned version (with PermutationBlock +
-# affine ACB), use DefenseAligned below.
-# If you used the original additive ACB version, use DefenseOriginal.
-# Set MODEL_VARIANT env var to "aligned" or "original".
-# ════════════════════════════════════════════════════════════
 
 MODEL_VARIANT = os.getenv("MODEL_VARIANT", "aligned")
 
@@ -276,10 +265,6 @@ class DefenseOriginal(nn.Module):
 
 # ════════════════════════════════════════════════════════════
 # MODEL LOADER
-# Handles the most common Kaggle checkpoint layouts:
-#   1. torch.save(model.state_dict(), path)           → plain dict
-#   2. torch.save({'model': model.state_dict()}, path) → wrapped
-#   3. torch.save(model, path)                         → full object
 # ════════════════════════════════════════════════════════════
 
 _model = None
@@ -296,34 +281,21 @@ def load_model():
 
     log.info(f"Loading model from {MODEL_PATH} on CPU …")
     try:
-        # Always map to CPU regardless of what device it was trained on
         checkpoint = torch.load(MODEL_PATH, map_location="cpu", weights_only=False)
-
         _model = _build_fresh_model()
 
-        # Detect checkpoint layout
         if isinstance(checkpoint, dict):
-            # Try common wrapper keys first
             state_dict = (checkpoint.get("model")
                        or checkpoint.get("state_dict")
                        or checkpoint.get("model_state_dict")
-                       or checkpoint)          # bare state_dict
-
-            # Strip any "module." prefix from DataParallel training
+                       or checkpoint)
             state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
-
-            missing, unexpected = _model.load_state_dict(state_dict, strict=False)
-            if missing:
-                log.warning(f"Missing keys ({len(missing)}): {missing[:5]} …")
-            if unexpected:
-                log.warning(f"Unexpected keys ({len(unexpected)}): {unexpected[:5]} …")
+            _model.load_state_dict(state_dict, strict=False)
         else:
-            # torch.save(model, ...) — full object saved
             _model = checkpoint.cpu()
 
         _model.eval()
         log.info("Model loaded successfully")
-
     except Exception as e:
         log.error(f"Failed to load checkpoint: {e} — using fresh weights")
         _model = _build_fresh_model()
@@ -347,11 +319,18 @@ def _build_fresh_model():
 def pil_to_tensor(img: Image.Image, size=IMAGE_SIZE) -> torch.Tensor:
     img = img.convert("RGB").resize((size, size), Image.LANCZOS)
     arr = np.array(img).astype(np.float32) / 255.0
-    return torch.from_numpy(arr).permute(2, 0, 1).unsqueeze(0)  # (1,3,H,W)
+    return torch.from_numpy(arr).permute(2, 0, 1).unsqueeze(0)
 
 def tensor_to_pil(t: torch.Tensor) -> Image.Image:
     arr = t.squeeze(0).permute(1, 2, 0).detach().float().clamp(0, 1).numpy()
     return Image.fromarray((arr * 255).astype(np.uint8))
+
+def tensor_to_base64(t: torch.Tensor) -> str:
+    pil_img = tensor_to_pil(t)
+    buf = io.BytesIO()
+    pil_img.save(buf, format="PNG")
+    b64_str = base64.b64encode(buf.getvalue()).decode("utf-8")
+    return "data:image/png;base64," + b64_str
 
 def save_image(t: torch.Tensor, name: str) -> str:
     path = OUTPUT_DIR / name
@@ -370,17 +349,24 @@ def psnr(a: torch.Tensor, b: torch.Tensor) -> float:
     return 20 * np.log10(1.0 / np.sqrt(mse))
 
 def r_list_to_json(r_list):
-    """Serialize r_list tensors to a JSON-safe structure."""
     return [r.detach().cpu().numpy().tolist() for r in r_list]
 
 def r_list_from_json(data):
-    """Deserialize r_list from JSON back to tensors."""
     return [torch.tensor(r, dtype=torch.float32) for r in data]
 
 
 # ════════════════════════════════════════════════════════════
 # ENDPOINTS
 # ════════════════════════════════════════════════════════════
+
+@app.route("/", methods=["GET"])
+def index():
+    return jsonify({
+        "status": "live",
+        "service": "DeepMIH Python Inference Service",
+        "device": str(DEVICE),
+        "model_loaded": Path(MODEL_PATH).exists(),
+    })
 
 @app.route("/health", methods=["GET"])
 def health():
@@ -395,24 +381,10 @@ def health():
 
 @app.route("/conceal", methods=["POST"])
 def conceal():
-    """
-    Expects multipart/form-data:
-      cover      : image file
-      secret_0   : image file
-      secret_1   : image file
-      ...
-      secret_N-1 : image file (N = 2..5)
-
-    Returns JSON:
-      { stego_path, r_list, texture_score }
-      or { error }
-    """
-    # ── Parse cover ──────────────────────────────────────────
     if "cover" not in request.files:
         return jsonify({"error": "cover image required"}), 400
     cover_pil = Image.open(request.files["cover"].stream)
 
-    # ── Texture gate (server-side enforcement) ───────────────
     texture_score = compute_texture_score(cover_pil)
     if texture_score < TEXTURE_MIN:
         return jsonify({
@@ -420,7 +392,6 @@ def conceal():
                      "Please use a more textured image (landscapes, buildings, crowds work well)."
         }), 422
 
-    # ── Parse secrets ────────────────────────────────────────
     secret_pils = []
     for i in range(NUM_SECRETS):
         key = f"secret_{i}"
@@ -428,19 +399,15 @@ def conceal():
             secret_pils.append(Image.open(request.files[key].stream))
 
     num_real_secrets = len(secret_pils)
-    
     if len(secret_pils) < 2:
         return jsonify({"error": "At least 2 secret images required"}), 400
 
-    # Pad to NUM_SECRETS with blank images if fewer uploaded
     while len(secret_pils) < NUM_SECRETS:
         secret_pils.append(Image.new("RGB", (IMAGE_SIZE, IMAGE_SIZE), (0, 0, 0)))
 
-    # ── Convert to tensors ───────────────────────────────────
     cover_t   = pil_to_tensor(cover_pil)
     secret_ts = [pil_to_tensor(s) for s in secret_pils]
 
-    # ── Inference ────────────────────────────────────────────
     model = load_model()
     job_id = uuid.uuid4().hex[:12]
 
@@ -448,7 +415,6 @@ def conceal():
         with torch.no_grad():
             if MODEL_VARIANT == "original":
                 stego_list, r_list, perm = model.conceal(cover_t, secret_ts)
-                # For original variant, store perm index as first r_list item
                 perm_tensor = perm.float().unsqueeze(0)
                 r_serialized = r_list_to_json([perm_tensor] + r_list)
             else:
@@ -457,7 +423,12 @@ def conceal():
 
         stego = stego_list[-1]
         stego_path = save_image(stego, f"stego_{job_id}.png")
-        log.info(f"Conceal job {job_id} done  texture={texture_score:.1f}")
+
+        # Encode stego to base64 so cloud services don't depend on shared disk
+        with open(stego_path, "rb") as f:
+            stego_bytes = f.read()
+            stego_hash = hashlib.sha256(stego_bytes).hexdigest()
+            stego_b64 = "data:image/png;base64," + base64.b64encode(stego_bytes).decode("utf-8")
 
         r_list_path = str(OUTPUT_DIR / f"rlist_{job_id}.json")
         with open(r_list_path, "w") as f:
@@ -467,16 +438,15 @@ def conceal():
             }, f)
 
         log.info(f"Conceal job {job_id} done  texture={texture_score:.1f}")
-        
-        with open(stego_path, "rb") as f:
-            stego_hash = hashlib.sha256(f.read()).hexdigest()
 
         return jsonify({
             "stego_path":    stego_path,
+            "stego_b64":     stego_b64,
+            "r_list":        r_serialized,
             "r_list_path":   r_list_path,
             "texture_score": texture_score,
             "num_secrets":   num_real_secrets,
-            "stego_hash":    stego_hash,   # <-- add this
+            "stego_hash":    stego_hash,
         })
 
     except Exception as e:
@@ -486,18 +456,12 @@ def conceal():
 
 @app.route("/reveal", methods=["POST"])
 def reveal():
-    """
-    Expects multipart/form-data:
-      stego        : image file
-      r_list       : JSON string OR r_list_path
-    """
     if "stego" not in request.files:
         return jsonify({"error": "stego image required"}), 400
     
     stego_pil = Image.open(request.files["stego"].stream)
     stego_t   = pil_to_tensor(stego_pil)
 
-    # Load original secrets if provided (for PSNR/SSIM metrics)
     orig_secrets = []
     for i in range(NUM_SECRETS):
         key = f"secret_{i}"
@@ -505,20 +469,19 @@ def reveal():
             orig_secrets.append(pil_to_tensor(Image.open(request.files[key].stream)))
 
     try:
-        if "r_list_path" in request.form:
-            r_list_path = request.form["r_list_path"]
-            with open(r_list_path, 'r') as f:
-                raw_data = json.load(f)
-        elif "r_list" in request.form:
+        if "r_list" in request.form and request.form["r_list"].strip():
             raw_data = json.loads(request.form["r_list"])
+        elif "r_list_path" in request.form and Path(request.form["r_list_path"]).exists():
+            with open(request.form["r_list_path"], 'r') as f:
+                raw_data = json.load(f)
         else:
-            return jsonify({"error": "r_list or r_list_path required"}), 400
+            return jsonify({"error": "r_list or valid r_list_path required"}), 400
         
         if isinstance(raw_data, dict) and "r_list" in raw_data:
             r_data = raw_data["r_list"]
             num_real_secrets = raw_data.get("num_secrets", NUM_SECRETS)
         else:
-            r_data = raw_data  # Fallback for old keys
+            r_data = raw_data
             num_real_secrets = NUM_SECRETS
             
     except (json.JSONDecodeError, ValueError, FileNotFoundError) as e:
@@ -541,21 +504,20 @@ def reveal():
             else:
                 cover_rec, secrets_rec = model.reveal([stego_t], r_tensors)
 
-        # Save recovered cover
         cover_path = save_image(cover_rec, f"cover_{job_id}.png")
+        cover_b64  = tensor_to_base64(cover_rec)
 
-        # Stego vs reconstructed-cover metrics (measures INN reconstruction quality)
         stego_psnr_val = psnr(stego_t, cover_rec)
         stego_ssim_val = float(F.mse_loss(stego_t.float(), cover_rec.float()).item())
 
-        # Save recovered secrets + compute metrics if originals provided
-        paths, psnr_scores, ssim_scores = [], [], []
+        paths, secrets_b64, psnr_scores, ssim_scores = [], [], [], []
         for i, s in enumerate(secrets_rec):
             path = save_image(s, f"secret_{job_id}_{i}.png")
             paths.append(path)
+            secrets_b64.append(tensor_to_base64(s))
+
             if i < len(orig_secrets):
                 p = psnr(orig_secrets[i], s)
-                # SSIM approximation: 1 - normalised MSE
                 mse_val = F.mse_loss(orig_secrets[i].float(), s.float()).item()
                 ssim_val = max(0.0, 1.0 - mse_val * 100)
                 psnr_scores.append(round(p, 2))
@@ -564,13 +526,14 @@ def reveal():
                 psnr_scores.append(0.0)
                 ssim_scores.append(0.0)
 
-        log.info(f"Reveal job {job_id} done — {len(paths)} secrets, "
-                 f"avg PSNR={sum(psnr_scores)/max(len(psnr_scores),1):.1f}dB")
+        log.info(f"Reveal job {job_id} done — {len(paths)} secrets")
         return jsonify({
-            "cover_path":   cover_path,
-            "stego_psnr":   round(stego_psnr_val, 2),
-            "stego_mse":    round(stego_ssim_val, 6),
+            "cover_path":    cover_path,
+            "cover_b64":     cover_b64,
+            "stego_psnr":    round(stego_psnr_val, 2),
+            "stego_mse":     round(stego_ssim_val, 6),
             "secrets_paths": paths,
+            "secrets_b64":   secrets_b64,
             "psnr_scores":   psnr_scores,
             "ssim_scores":   ssim_scores,
         })
@@ -582,7 +545,6 @@ def reveal():
 
 @app.route("/texture_check", methods=["POST"])
 def texture_check():
-    """Quick endpoint to check texture score before full conceal."""
     if "image" not in request.files:
         return jsonify({"error": "image required"}), 400
     img = Image.open(request.files["image"].stream)
@@ -596,13 +558,10 @@ def texture_check():
     })
 
 
-# ════════════════════════════════════════════════════════════
-# STARTUP
-# ════════════════════════════════════════════════════════════
-
 if __name__ == "__main__":
+    port = int(os.getenv("PORT", "5001"))
+    log.info(f"Starting server on port {port}...")
     log.info(f"Device: {DEVICE}")
     log.info(f"Model variant: {MODEL_VARIANT}")
-    log.info(f"Torch threads: {torch.get_num_threads()}")
-    load_model()   # warm up on startup
-    app.run(host="0.0.0.0", port=5001, debug=False, threaded=True)
+    load_model()
+    app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
