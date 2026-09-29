@@ -15,16 +15,14 @@ import uuid
 import logging
 import numpy as np
 from pathlib import Path
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Request as FlaskRequest 
 from PIL import Image
 import cv2
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from werkzeug.wrappers import Request as WerkzeugRequest
 
-class CustomRequest(WerkzeugRequest):
-    # Allow large non-file form fields in memory (250 MB)
+class CustomRequest(FlaskRequest):
     max_form_memory_size = 250 * 1024 * 1024
 
 app = Flask(__name__)
