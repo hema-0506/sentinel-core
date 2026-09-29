@@ -21,6 +21,15 @@ import cv2
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from werkzeug.wrappers import Request as WerkzeugRequest
+
+class CustomRequest(WerkzeugRequest):
+    # Allow large non-file form fields in memory (250 MB)
+    max_form_memory_size = 250 * 1024 * 1024
+
+app = Flask(__name__)
+app.request_class = CustomRequest
+app.config["MAX_CONTENT_LENGTH"] = 250 * 1024 * 1024
 
 # ── Force CPU ────────────────────────────────────────────────
 DEVICE = torch.device("cpu")
@@ -30,7 +39,8 @@ torch.set_num_threads(int(os.getenv("OMP_NUM_THREADS", "1")))
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
 log = logging.getLogger("defense")
 
-app = Flask(__name__)
+
+
 
 # ── Config ────────────────────────────────────────────────────
 MODEL_PATH   = os.getenv("MODEL_PATH", "./models/defense_final.pth")
@@ -469,13 +479,15 @@ def reveal():
             orig_secrets.append(pil_to_tensor(Image.open(request.files[key].stream)))
 
     try:
-        if "r_list" in request.form and request.form["r_list"].strip():
+        if "r_list_file" in request.files:
+            raw_data = json.load(request.files["r_list_file"].stream)
+        elif "r_list" in request.form and request.form["r_list"].strip():
             raw_data = json.loads(request.form["r_list"])
         elif "r_list_path" in request.form and Path(request.form["r_list_path"]).exists():
             with open(request.form["r_list_path"], 'r') as f:
                 raw_data = json.load(f)
         else:
-            return jsonify({"error": "r_list or valid r_list_path required"}), 400
+            return jsonify({"error": "r_list_file or r_list required"}), 400
         
         if isinstance(raw_data, dict) and "r_list" in raw_data:
             r_data = raw_data["r_list"]

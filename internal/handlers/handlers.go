@@ -464,8 +464,14 @@ func (h *Handler) Reveal(w http.ResponseWriter, r *http.Request) {
 	}
 	fw.Write(stegoBytes)
 
-	// Pass r_list directly as a form field
-	mw.WriteField("r_list", string(payload.RList))
+	// Stream r_list as a form file to bypass Werkzeug 500KB text field cap
+	rfw, err := mw.CreateFormFile("r_list_file", "r_list.json")
+	if err != nil {
+		h.err(w, 500, "multipart error")
+		return
+	}
+	rfw.Write([]byte(payload.RList))
+
 	mw.Close()
 
 	resp, err := http.Post(h.pythonURL+"/reveal", mw.FormDataContentType(), &buf)
