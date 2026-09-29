@@ -1,0 +1,30 @@
+# Secrets
+.env
+*.env
+
+# Go binaries
+/bin/
+*.exe
+main
+
+# Python cache & virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+
+# IDE & OS files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Large model artifacts (if applicable)
+*.pth
+*.pt
+*.bin
+*.onnx
+
+outputs/

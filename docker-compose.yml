@@ -1,0 +1,70 @@
+#docker-compose.yml
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: defense
+      POSTGRES_PASSWORD: defense
+      POSTGRES_DB: defense
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U defense -d defense"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgres://defense:defense@postgres:5432/defense?sslmode=disable
+      JWT_SECRET: "change-me-to-32-random-chars-now"
+      KEY_VAULT_MASTER_KEY: "00112233445566778899aabbccddeeff"
+      PORT: "8080"
+      PYTHON_SERVICE_URL: "http://python:5001"
+      # Go reads files Python wrote — same host directory, different container path
+      OUTPUT_DIR: /app/outputs
+      PY_OUTPUT_DIR: /tmp/defense_outputs
+    volumes:
+      # Single host directory shared by both containers
+      # Python writes here, Go reads from here — same physical files
+      - ./outputs:/app/outputs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      python:
+        condition: service_started
+
+  python:
+    build:
+      context: ./python_service
+      dockerfile: Dockerfile
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./python_service/models:/app/models:ro
+      # Same host directory — Python writes, Go reads
+      - ./outputs:/tmp/defense_outputs
+    environment:
+      MODEL_PATH: /app/models/defense_final.pth
+      MODEL_VARIANT: aligned
+      NUM_SECRETS: 5
+      IMAGE_SIZE: 256
+      TEXTURE_MIN: 50.0
+      OUTPUT_DIR: /tmp/defense_outputs
+    command: >
+      gunicorn --workers=2 --timeout=300
+      --bind=0.0.0.0:5001
+      --limit-request-line=0
+      --limit-request-field_size=0
+      app:app
+
+volumes:
+  pg_data:

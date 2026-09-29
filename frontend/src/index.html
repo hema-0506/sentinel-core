@@ -1,0 +1,1512 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Defense Intelligence</title>
+<style>
+/* ── Reset & tokens ────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:      #07090f;
+  --surface: #0e1420;
+  --card:    #111926;
+  --border:  rgba(255,255,255,0.07);
+  --border2: rgba(255,255,255,0.14);
+  --accent:  #2f80ed;
+  --accent2: #00c9a7;
+  --danger:  #e74c3c;
+  --warn:    #f39c12;
+  --text:    #d4dbe8;
+  --muted:   #5a6a82;
+  --radius:  10px;
+  --font:    'Inter', system-ui, sans-serif;
+}
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body { background: var(--bg); color: var(--text); font-family: var(--font);
+       font-size: 14px; line-height: 1.6; min-height: 100vh; }
+
+/* ── Scrollbar ─────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+/* ── Layout ────────────────────────────────────────────── */
+.app { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+.sidebar { background: var(--surface); border-right: 1px solid var(--border);
+           display: flex; flex-direction: column; padding: 0; }
+.main { overflow-y: auto; }
+
+/* ── Sidebar ────────────────────────────────────────────── */
+.sidebar-logo { padding: 24px 20px 16px;
+  border-bottom: 1px solid var(--border); }
+.logo-mark { font-size: 11px; font-weight: 600; letter-spacing: 0.2em;
+             color: var(--accent); text-transform: uppercase; }
+.logo-title { font-size: 17px; font-weight: 700; color: #fff; margin-top: 2px; }
+.logo-sub { font-size: 10px; color: var(--muted); letter-spacing: 0.1em;
+            text-transform: uppercase; margin-top: 2px; }
+
+.sidebar-user { padding: 14px 20px; border-bottom: 1px solid var(--border);
+                display: flex; align-items: center; gap: 10px; }
+.avatar { width: 32px; height: 32px; border-radius: 50%;
+          background: var(--accent); display: flex; align-items: center;
+          justify-content: center; font-weight: 700; font-size: 13px; color: #fff;
+          flex-shrink: 0; }
+.user-info { overflow: hidden; }
+.user-name { font-weight: 600; font-size: 13px; color: #fff;
+             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.user-role { font-size: 10px; color: var(--muted); text-transform: uppercase;
+             letter-spacing: 0.1em; }
+.role-pill { display: inline-block; padding: 2px 8px; border-radius: 999px;
+             font-size: 9px; font-weight: 600; letter-spacing: 0.1em;
+             text-transform: uppercase; }
+.role-sender   { background: rgba(47,128,237,0.15); color: #5ba3f5; }
+.role-receiver { background: rgba(0,201,167,0.15);  color: var(--accent2); }
+.role-admin    { background: rgba(231,76,60,0.15);   color: #f07167; }
+
+nav { flex: 1; padding: 12px 0; }
+.nav-section { padding: 6px 20px 4px;
+  font-size: 9px; font-weight: 600; color: var(--muted);
+  letter-spacing: 0.15em; text-transform: uppercase; }
+.nav-item { display: flex; align-items: center; gap: 10px;
+            padding: 9px 20px; cursor: pointer; color: var(--muted);
+            font-size: 13px; font-weight: 500; transition: all 0.15s;
+            border-left: 3px solid transparent; user-select: none; }
+.nav-item:hover { background: rgba(255,255,255,0.04); color: var(--text); }
+.nav-item.active { color: #fff; background: rgba(47,128,237,0.1);
+                   border-left-color: var(--accent); }
+.nav-icon { width: 16px; height: 16px; opacity: 0.7; flex-shrink: 0; }
+
+.sidebar-bottom { padding: 14px 20px; border-top: 1px solid var(--border); }
+
+/* ── Page header ─────────────────────────────────────────── */
+.page-header { padding: 28px 32px 0; border-bottom: 1px solid var(--border);
+               background: var(--surface); }
+.page-title { font-size: 20px; font-weight: 700; color: #fff; }
+.page-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.page-tabs { display: flex; gap: 0; margin-top: 20px; }
+.tab-btn { padding: 10px 18px; font-size: 12px; font-weight: 500;
+           color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent;
+           transition: all 0.15s; letter-spacing: 0.04em; }
+.tab-btn:hover { color: var(--text); }
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* ── Content ─────────────────────────────────────────────── */
+.content { padding: 28px 32px; }
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+
+/* ── Cards ───────────────────────────────────────────────── */
+.card { background: var(--card); border: 1px solid var(--border);
+        border-radius: var(--radius); padding: 20px; margin-bottom: 16px; }
+.card-title { font-size: 12px; font-weight: 600; color: var(--muted);
+              text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 14px; }
+
+/* ── Grid helpers ────────────────────────────────────────── */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+
+/* ── Stat tiles ──────────────────────────────────────────── */
+.stat-tile { background: var(--card); border: 1px solid var(--border);
+             border-radius: var(--radius); padding: 16px; }
+.stat-label { font-size: 10px; color: var(--muted); text-transform: uppercase;
+              letter-spacing: 0.14em; font-weight: 600; }
+.stat-value { font-size: 26px; font-weight: 700; color: #fff; margin-top: 4px;
+              font-variant-numeric: tabular-nums; }
+.stat-unit { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+/* ── Upload zone ─────────────────────────────────────────── */
+.upload-zone { border: 1.5px dashed var(--border2); border-radius: var(--radius);
+               padding: 32px 20px; text-align: center; cursor: pointer;
+               transition: all 0.2s; background: rgba(255,255,255,0.01); }
+.upload-zone:hover, .upload-zone.dragover {
+  border-color: var(--accent); background: rgba(47,128,237,0.05); }
+.upload-icon { font-size: 28px; margin-bottom: 10px; opacity: 0.4; }
+.upload-label { font-size: 13px; color: var(--muted); }
+.upload-label strong { color: var(--accent); }
+.upload-hint { font-size: 11px; color: var(--muted); margin-top: 4px; opacity: 0.7; }
+.upload-preview { margin-top: 10px; }
+.upload-preview img { width: 100%; max-height: 200px; object-fit: cover;
+                       border-radius: 6px; }
+.upload-name { font-size: 11px; color: var(--accent2); margin-top: 6px; }
+
+/* ── Texture bar ─────────────────────────────────────────── */
+.texture-bar { margin-top: 12px; }
+.texture-header { display: flex; justify-content: space-between;
+                  font-size: 11px; margin-bottom: 6px; }
+.texture-label { color: var(--muted); }
+.texture-score { font-weight: 600; }
+.score-ok { color: var(--accent2); }
+.score-bad { color: var(--danger); }
+.progress-track { height: 6px; background: rgba(255,255,255,0.06);
+                  border-radius: 3px; overflow: hidden; }
+.progress-fill { height: 100%; border-radius: 3px; transition: width 0.4s ease; }
+.fill-ok  { background: var(--accent2); }
+.fill-bad { background: var(--danger); }
+.texture-msg { font-size: 10px; margin-top: 6px; font-weight: 500; }
+
+/* ── Buttons ─────────────────────────────────────────────── */
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 18px;
+       border-radius: 7px; font-size: 13px; font-weight: 500; cursor: pointer;
+       border: none; transition: all 0.15s; user-select: none; }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: #1a6ed8; }
+.btn-secondary { background: rgba(255,255,255,0.06); color: var(--text);
+                 border: 1px solid var(--border2); }
+.btn-secondary:hover { background: rgba(255,255,255,0.1); }
+.btn-danger { background: rgba(231,76,60,0.15); color: #f07167;
+              border: 1px solid rgba(231,76,60,0.3); }
+.btn-full { width: 100%; justify-content: center; padding: 12px; font-size: 14px; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-sm { padding: 5px 12px; font-size: 12px; }
+
+/* ── Inputs ──────────────────────────────────────────────── */
+.field { margin-bottom: 14px; }
+.field label { display: block; font-size: 11px; font-weight: 600; color: var(--muted);
+               text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 6px; }
+.field input, .field select { width: 100%; background: var(--surface);
+  border: 1px solid var(--border2); border-radius: 7px; padding: 9px 12px;
+  color: var(--text); font-size: 16px; outline: none; transition: border-color 0.15s; }
+.field input:focus, .field select:focus { border-color: var(--accent); }
+.field input::placeholder { color: var(--muted); }
+
+/* ── Alerts ──────────────────────────────────────────────── */
+.alert { padding: 10px 14px; border-radius: 7px; font-size: 12px;
+         margin-bottom: 14px; display: flex; align-items: flex-start; gap: 8px; }
+.alert-info    { background: rgba(47,128,237,0.1);  border: 1px solid rgba(47,128,237,0.25);
+                 color: #7ab8f5; }
+.alert-success { background: rgba(0,201,167,0.1);   border: 1px solid rgba(0,201,167,0.25);
+                 color: var(--accent2); }
+.alert-danger  { background: rgba(231,76,60,0.1);   border: 1px solid rgba(231,76,60,0.25);
+                 color: #f07167; }
+.alert-warn    { background: rgba(243,156,18,0.1);  border: 1px solid rgba(243,156,18,0.25);
+                 color: var(--warn); }
+
+/* ── Badge ───────────────────────────────────────────────── */
+.badge { display: inline-block; padding: 2px 8px; border-radius: 999px;
+         font-size: 10px; font-weight: 600; letter-spacing: 0.08em; }
+.badge-done    { background: rgba(0,201,167,0.15); color: var(--accent2); }
+.badge-pending { background: rgba(243,156,18,0.15); color: var(--warn); }
+.badge-failed  { background: rgba(231,76,60,0.15); color: #f07167; }
+
+/* ── Table ───────────────────────────────────────────────── */
+.data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.data-table th { padding: 8px 12px; text-align: left; font-size: 10px;
+  font-weight: 600; color: var(--muted); text-transform: uppercase;
+  letter-spacing: 0.1em; border-bottom: 1px solid var(--border); }
+.data-table td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.03);
+                 color: var(--text); }
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+/* ── Key box ─────────────────────────────────────────────── */
+.key-box { background: var(--surface); border: 1px solid var(--border2);
+           border-radius: 7px; padding: 12px 14px; font-family: 'JetBrains Mono',
+           'Fira Code', monospace; font-size: 12px; color: var(--accent2);
+           word-break: break-all; margin: 8px 0; line-height: 1.7; }
+
+/* ── Result images ────────────────────────────────────────── */
+.img-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 12px; margin-top: 12px; }
+.img-tile { background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius); overflow: hidden; }
+.img-tile img { width: 100%; display: block; }
+.img-tile-label { padding: 8px 10px; font-size: 10px; font-weight: 600;
+                  color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.img-tile-meta { padding: 0 10px 8px; font-size: 11px; color: var(--accent2); font-weight: 500; }
+
+/* ── Spinner ─────────────────────────────────────────────── */
+.spinner { width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.1);
+           border-top-color: var(--accent); border-radius: 50%;
+           animation: spin 0.6s linear infinite; flex-shrink: 0; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Auth screen ─────────────────────────────────────────── */
+#auth-screen { position: fixed; inset: 0; background: var(--bg); overflow-y: auto; padding: 16px;
+               display: flex; align-items: center; justify-content: center; z-index: 100; }
+.auth-card { background: var(--surface); border: 1px solid var(--border2); margin: auto;
+             border-radius: 14px; padding: 36px 32px; width: 100%; max-width: 380px; }
+.field-hint { font-size: 11px; color: var(--muted); margin-top: 5px; }
+.auth-logo { text-align: center; margin-bottom: 28px; }
+.auth-logo-mark { font-size: 10px; font-weight: 700; letter-spacing: 0.3em;
+                  color: var(--accent); text-transform: uppercase; }
+.auth-logo-title { font-size: 22px; font-weight: 800; color: #fff; margin-top: 4px; }
+.auth-logo-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.auth-switch { text-align: center; font-size: 12px; color: var(--muted); margin-top: 14px; }
+.auth-switch a { color: var(--accent); cursor: pointer; text-decoration: none; }
+
+/* ── TOTP setup ──────────────────────────────────────────── */
+.qr-wrap { text-align: center; margin: 14px 0; }
+.qr-wrap img { width: 160px; height: 160px; border-radius: 8px; background: #fff; padding: 8px; }
+.secret-display { font-family: monospace; font-size: 11px; letter-spacing: 0.15em;
+                  word-break: break-all; color: var(--accent2); padding: 8px;
+                  background: var(--bg); border-radius: 6px; margin-top: 8px; }
+
+/* ── Divider ─────────────────────────────────────────────── */
+.divider { height: 1px; background: var(--border); margin: 20px 0; }
+
+/* ── Empty state ─────────────────────────────────────────── */
+.empty { text-align: center; padding: 48px 20px; color: var(--muted); }
+.empty-icon { font-size: 36px; margin-bottom: 12px; opacity: 0.3; }
+.empty-text { font-size: 13px; }
+
+/* ── Toast ────────────────────────────────────────────────── */
+#toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 999;
+                   display: flex; flex-direction: column; gap: 8px; }
+.toast { background: var(--card); border: 1px solid var(--border2); border-radius: 8px;
+         padding: 12px 16px; font-size: 12px; min-width: 260px; max-width: 360px;
+         display: flex; gap: 10px; align-items: flex-start;
+         animation: slideIn 0.2s ease; }
+.toast.info    { border-left: 3px solid var(--accent); }
+.toast.success { border-left: 3px solid var(--accent2); }
+.toast.error   { border-left: 3px solid var(--danger); }
+@keyframes slideIn { from { transform: translateX(20px); opacity: 0; } }
+
+/* ── Metric inline ───────────────────────────────────────── */
+.metric-inline { display:flex; align-items:center; }
+
+/* ── Responsive ──────────────────────────────────────────── */
+/* Mobile browsers (iOS Safari especially) zoom the whole page when a focused
+   input has font-size < 16px, and stay zoomed afterwards. All inputs are set
+   to 16px unconditionally above (.field input, .field select) so this can't
+   happen on any device; this catch-all covers any input outside .field. */
+input, select, textarea { font-size: 16px; }
+@media (max-width: 768px) {
+  .auth-card { padding: 28px 20px; }
+  .app { grid-template-columns: 1fr; }
+  .sidebar { display: none; }
+  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── Auth screen ─────────────────────────────────────────── -->
+<div id="auth-screen">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <div class="auth-logo-mark">Defense Lab</div>
+      <div class="auth-logo-sub">Multi-Secret Image Steganography</div>
+    </div>
+    <div id="auth-login-form">
+      <div id="auth-error" class="alert alert-danger" style="display:none"></div>
+      <div class="field"><label>Username</label>
+        <input id="login-user" type="text" placeholder="Username" autocomplete="username"
+               autocapitalize="off" autocorrect="off" spellcheck="false"/>
+      </div>
+      <div class="field"><label>Password</label>
+        <input id="login-pass" type="password" placeholder="••••••••••••" autocomplete="current-password"/>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="doLogin()">Sign In</button>
+      <div class="auth-switch">No account? <a onclick="showRegister()">Register</a></div>
+    </div>
+
+    <div id="auth-register-form" style="display:none">
+      <div id="reg-error" class="alert alert-danger" style="display:none"></div>
+      <div class="field"><label>Username</label>
+        <input id="reg-user" type="text" placeholder="Username" autocomplete="username"
+               autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="32"/>
+        <div class="field-hint">Letters, numbers, and underscores only, 3–32 characters. Not case-sensitive.</div>
+      </div>
+      <div class="field"><label>Email</label>
+        <input id="reg-email" type="email" placeholder="user@example.com" autocomplete="email"
+               autocapitalize="off" spellcheck="false"/>
+      </div>
+      <div class="field"><label>Password (min 12 chars)</label>
+        <input id="reg-pass" type="password" placeholder="••••••••••••" autocomplete="new-password"/>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="doRegister()">Create Account</button>
+      <div class="auth-switch"><a onclick="showLogin()">Back to login</a></div>
+    </div>
+
+    <div id="auth-totp-form" style="display:none">
+      <div class="alert alert-info">Enter the 6-digit code from your authenticator app.</div>
+      <div id="totp-error" class="alert alert-danger" style="display:none"></div>
+      <div class="field"><label>Authenticator Code</label>
+        <input id="totp-code" type="text" maxlength="6" placeholder="000000"
+               inputmode="numeric" style="letter-spacing:0.3em;font-size:18px;text-align:center"/>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="doTOTP()">Verify</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── App shell ───────────────────────────────────────────── -->
+<div class="app" id="app" style="display:none">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-mark">Defense Lab</div>
+      <div class="logo-sub">Image Steganography</div>
+    </div>
+    <div class="sidebar-user">
+      <div class="avatar" id="sb-avatar">?</div>
+      <div class="user-info">
+        <div class="user-name" id="sb-username">—</div>
+        <span class="role-pill" id="sb-role-pill">—</span>
+      </div>
+    </div>
+    <nav>
+      <div class="nav-section">Workspace</div>
+      <div class="nav-item active" data-tab="overview" onclick="switchSection(this)">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/>
+          <rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/>
+        </svg>
+        Overview
+      </div>
+      <div class="nav-item" id="nav-conceal" data-tab="conceal" onclick="switchSection(this)">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="2" y="2" width="12" height="12" rx="2"/>
+          <path d="M5 8h6M8 5v6"/>
+        </svg>
+        Conceal Secrets
+      </div>
+      <div class="nav-item" id="nav-reveal" data-tab="reveal" onclick="switchSection(this)">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="8" cy="8" r="3"/><path d="M1 8s3-5 7-5 7 5 7 5-3 5-7 5-7-5-7-5z"/>
+        </svg>
+        Reveal Secrets
+      </div>
+      <div class="nav-item" data-tab="jobs" onclick="switchSection(this)">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M2 4h12M2 8h8M2 12h5"/>
+        </svg>
+        Job History
+      </div>
+      <div class="nav-item" data-tab="keys" onclick="switchSection(this)">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="5" cy="9" r="3"/><path d="M8 9h7M13 7v4"/>
+        </svg>
+        Key Inbox
+      </div>
+      <div class="nav-section" id="nav-admin-section" style="display:none">Admin</div>
+      <div class="nav-item" id="nav-users" data-tab="users" onclick="switchSection(this)" style="display:none">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/>
+        </svg>
+        Users
+      </div>
+      <div class="nav-item" id="nav-audit" data-tab="audit" onclick="switchSection(this)" style="display:none">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M3 2h10a1 1 0 011 1v10a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1z"/>
+          <path d="M5 6h6M5 9h4"/>
+        </svg>
+        Audit Log
+      </div>
+    </nav>
+    <div class="sidebar-bottom">
+      <div class="nav-item" data-tab="security" onclick="switchSection(this)" style="padding:9px 0;border-left:none">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M8 1l5 2v5c0 3-2.5 5.5-5 7C5.5 13.5 3 11 3 8V3l5-2z"/>
+        </svg>
+        Security Settings
+      </div>
+      <button class="btn btn-secondary btn-full btn-sm" style="margin-top:8px" onclick="logout()">Sign Out</button>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <div class="main">
+
+    <!-- ── Overview ─────────────────────────────────────── -->
+    <div id="section-overview">
+      <div class="page-header">
+        <div class="page-title">Overview</div>
+        <div class="page-sub">Defense-grade multi-secret image steganography</div>
+        <div class="page-tabs"></div>
+      </div>
+      <div class="content">
+        <div class="grid-4" style="margin-bottom:20px">
+          <div class="stat-tile">
+            <div class="stat-label">Jobs Run</div>
+            <div class="stat-value" id="stat-jobs">—</div>
+          </div>
+          <div class="stat-tile">
+            <div class="stat-label">Secrets Hidden</div>
+            <div class="stat-value" id="stat-secrets">—</div>
+          </div>
+          <div class="stat-tile">
+            <div class="stat-label">Keys in Vault</div>
+            <div class="stat-value" id="stat-keys">—</div>
+          </div>
+          <div class="stat-tile">
+            <div class="stat-label">Your Role</div>
+            <div class="stat-value" style="font-size:16px" id="stat-role">—</div>
+          </div>
+        </div>
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title">How it works</div>
+            <p style="font-size:12px;color:var(--muted);line-height:1.8">
+              <strong style="color:var(--text)">Sender</strong> uploads a cover image and 2–5 secret images.
+              The INN embeds all secrets invisibly into the cover.
+              You receive a <strong style="color:var(--text)">stego image</strong> (publicly sharable)
+              and an <strong style="color:var(--accent2)">encrypted key</strong> (private).<br><br>
+              <strong style="color:var(--text)">Receiver</strong> presents the stego image + key ID.
+              The INN reverses the embedding and recovers all secrets at high fidelity.
+            </p>
+          </div>
+          <div class="card">
+            <div class="card-title">Security model</div>
+            <p style="font-size:12px;color:var(--muted);line-height:1.8">
+              ✓ TLS 1.3 in transit<br>
+              ✓ AES-256-GCM key encryption at rest<br>
+              ✓ JWT + optional TOTP two-factor auth<br>
+              ✓ RBAC — sender / receiver / admin roles<br>
+              ✓ Per-IP rate limiting (10 ops/min)<br>
+              ✓ Immutable audit log on every operation<br>
+              ✓ Texture gate — rejects low-capacity covers
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Conceal ────────────────────────────────────── -->
+    <div id="section-conceal" style="display:none">
+      <div class="page-header">
+        <div class="page-title">Conceal Secrets</div>
+        <div class="page-sub">Embed 2–5 secret images invisibly into a cover image</div>
+        <div class="page-tabs"></div>
+      </div>
+      <div class="content">
+        <div class="grid-2">
+          <!-- Left: Upload -->
+          <div>
+            <div class="card">
+              <div class="card-title">Cover image</div>
+              <div class="upload-zone" id="cover-zone"
+                   onclick="document.getElementById('cover-input').click()"
+                   ondragover="onDragOver(event)" ondrop="onDropCover(event)">
+                <input type="file" id="cover-input" accept="image/*" style="display:none"
+                       onchange="handleCoverUpload(event)"/>
+                <div class="upload-icon">🖼</div>
+                <div class="upload-label"><strong>Click or drag</strong> to upload cover</div>
+                <div class="upload-hint">PNG / JPG · max 32 MB · min 256 × 256</div>
+                <div class="upload-preview" id="cover-preview" style="display:none">
+                  <img id="cover-img" src=""/>
+                  <div class="upload-name" id="cover-name"></div>
+                </div>
+              </div>
+              <div class="texture-bar" id="texture-bar" style="display:none">
+                <div class="texture-header">
+                  <span class="texture-label">Texture capacity score</span>
+                  <span class="texture-score" id="texture-val"></span>
+                </div>
+                <div class="progress-track">
+                  <div class="progress-fill" id="texture-fill" style="width:0%"></div>
+                </div>
+                <div class="texture-msg" id="texture-msg"></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-title">Secret images
+                <span style="color:var(--muted);font-weight:400"> — 2 to 5 required</span>
+              </div>
+              <div id="secret-slots">
+                <!-- Generated dynamically -->
+              </div>
+              <div style="margin-top:10px;display:flex;gap:8px">
+                <button class="btn btn-secondary btn-sm" onclick="addSecretSlot()"
+                        id="add-secret-btn">+ Add slot</button>
+                <span style="font-size:11px;color:var(--muted);align-self:center"
+                      id="secret-count-label">0 / 5 slots</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right: Result -->
+          <div>
+            <div class="card" id="conceal-result" style="display:none">
+              <div class="card-title">Embedding result</div>
+              <div id="conceal-result-inner"></div>
+            </div>
+            <div class="card">
+              <div class="card-title">Ready to embed</div>
+              <p style="font-size:12px;color:var(--muted);margin-bottom:14px">
+                Upload a cover image (texture score ≥ 50) and at least 2 secret images,
+                then click embed.
+              </p>
+              <button class="btn btn-primary btn-full" id="embed-btn" onclick="doConceal()" disabled>
+                Embed secrets
+              </button>
+              <div id="embed-status" style="margin-top:12px"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Reveal ─────────────────────────────────────── -->
+    <div id="section-reveal" style="display:none">
+      <div class="page-header">
+        <div class="page-title">Reveal Secrets</div>
+        <div class="page-sub">Recover hidden images from a stego image using your key</div>
+        <div class="page-tabs"></div>
+      </div>
+      <div class="content">
+        <div class="grid-2">
+          <div>
+            <div class="card">
+              <div class="card-title">Stego image</div>
+              <div class="upload-zone" onclick="document.getElementById('stego-input').click()">
+                <input type="file" id="stego-input" accept="image/*" style="display:none"
+                       onchange="handleStegoUpload(event)"/>
+                <div class="upload-icon">🔍</div>
+                <div class="upload-label"><strong>Click</strong> to upload stego image</div>
+                <div class="upload-hint">The image transmitted from the sender</div>
+                <div class="upload-preview" id="stego-preview" style="display:none">
+                  <img id="stego-img" src=""/>
+                  <div class="upload-name" id="stego-name"></div>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-title">Reveal key</div>
+              <div class="field">
+                <label>Key ID</label>
+                <input id="reveal-key-id" type="text"
+                       placeholder="Paste key ID from sender or select from inbox"/>
+              </div>
+              <div id="inbox-keys-list"></div>
+              <button class="btn btn-primary btn-full" id="reveal-btn" onclick="doReveal()" disabled>
+                Reveal secrets
+              </button>
+              <div id="reveal-status" style="margin-top:12px"></div>
+            </div>
+          </div>
+          <div>
+            <div class="card" id="reveal-result" style="display:none">
+              <div class="card-title">Recovered secrets</div>
+              <div id="reveal-result-inner"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Jobs ──────────────────────────────────────── -->
+    <div id="section-jobs" style="display:none">
+      <div class="page-header">
+        <div class="page-title">Job History</div>
+        <div class="page-sub">All conceal and reveal operations</div>
+        <div class="page-tabs"></div>
+      </div>
+      <div class="content">
+        <div class="card">
+          <table class="data-table">
+            <thead>
+              <tr><th>Job ID</th><th>Op</th><th>Secrets</th>
+                  <th>Texture</th><th>Status</th><th>Created</th></tr>
+            </thead>
+            <tbody id="jobs-tbody">
+              <tr><td colspan="6" style="text-align:center;padding:32px;color:var(--muted)">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Key inbox ──────────────────────────────────── -->
+    <div id="section-keys" style="display:none">
+      <div class="page-header">
+        <div class="page-title">Key Inbox</div>
+        <div class="page-sub">Reveal keys shared with you by senders</div>
+        <div class="page-tabs"></div>
+      </div>
+      <div class="content">
+        <div class="card">
+          <table class="data-table">
+            <thead>
+              <tr><th>Key ID</th><th>Job ID</th><th>Transferred</th><th>Action</th></tr>
+            </thead>
+            <tbody id="keys-tbody">
+              <tr><td colspan="4" style="text-align:center;padding:32px;color:var(--muted)">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Security ───────────────────────────────────── -->
+    <div id="section-security" style="display:none">
+      <div class="page-header">
+        <div class="page-title">Security Settings</div>
+        <div class="page-sub">Manage your authentication and active sessions</div>
+        <div class="page-tabs"></div>
+      </div>
+      <div class="content">
+        <div class="grid-2">
+          <div>
+            <div class="card">
+              <div class="card-title">Two-factor authentication (TOTP)</div>
+              <div id="totp-setup-area">
+                <p style="font-size:12px;color:var(--muted);margin-bottom:14px">
+                  Secure your account with an authenticator app (Google Authenticator, Authy, etc.).
+                </p>
+                <button class="btn btn-secondary" onclick="startTOTPSetup()">Set up TOTP</button>
+              </div>
+              <div id="totp-qr-area" style="display:none">
+                <p style="font-size:12px;color:var(--muted);margin-bottom:10px">
+                  Scan this QR code with your authenticator app, then enter the code to confirm.
+                </p>
+                <div class="qr-wrap">
+                  <img id="totp-qr-img" src="" alt="QR code"/>
+                </div>
+                <div class="secret-display" id="totp-secret-text"></div>
+                <div class="field" style="margin-top:12px">
+                  <label>Confirmation code</label>
+                  <input id="totp-confirm-code" type="text" maxlength="6" placeholder="000000"
+                         inputmode="numeric"/>
+                </div>
+                <button class="btn btn-primary" onclick="confirmTOTPSetup()">Activate TOTP</button>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div class="card" id="become-sender-card" style="display:none">
+              <div class="card-title">Account role</div>
+              <p style="font-size:12px;color:var(--muted);margin-bottom:14px">
+                Your account is currently a <b>receiver</b> — you can reveal
+                images shared with you. Switching to <b>sender</b> also lets
+                you hide and share images.
+                <br/><br/>
+                <span style="color:var(--danger)">This is one-way: once you
+                switch, only an admin can move you back.</span>
+              </p>
+              <button class="btn btn-secondary" onclick="becomeSender()">Switch to sender</button>
+            </div>
+          </div>
+        </div>
+        <div class="grid-2">
+          <div>
+            <div class="card">
+              <div class="card-title">Active sessions</div>
+              <div id="sessions-list">
+                <p style="font-size:12px;color:var(--muted)">Loading…</p>
+              </div>
+              <button class="btn btn-secondary btn-sm" style="margin-top:10px" onclick="loadSessions()">
+                Refresh
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Admin: Users ──────────────────────────────── -->
+    <div id="section-users" style="display:none">
+      <div class="page-header">
+        <div class="page-title">User Management</div>
+        <div class="page-sub">Admin · Manage accounts and roles</div>
+        <div class="page-tabs"></div>
+      </div>
+      <div class="content">
+        <div class="card">
+          <table class="data-table">
+            <thead>
+              <tr><th>ID</th><th>Username</th><th>Email</th>
+                  <th>Role</th><th>Active</th><th>Created</th><th>Actions</th></tr>
+            </thead>
+            <tbody id="users-tbody">
+              <tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted)">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Admin: Audit ──────────────────────────────── -->
+    <div id="section-audit" style="display:none">
+      <div class="page-header">
+        <div class="page-title">Audit Log</div>
+        <div class="page-sub">Admin · Immutable record of all operations</div>
+        <div class="page-tabs"></div>
+      </div>
+      <div class="content">
+        <div class="card">
+          <table class="data-table">
+            <thead>
+              <tr><th>Time</th><th>User ID</th><th>Action</th>
+                  <th>Detail</th><th>IP</th></tr>
+            </thead>
+            <tbody id="audit-tbody">
+              <tr><td colspan="5" style="text-align:center;padding:32px;color:var(--muted)">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<div id="toast-container"></div>
+
+<script>
+// ── State ────────────────────────────────────────────────────
+const API = '';  // same origin
+let token = localStorage.getItem('dmih_token');
+let currentUser = null;
+let pendingToken = null;
+let secretSlots = [];
+let coverFile = null;
+let stegoFile = null;
+let textureOK = false;
+
+// ── API helper ────────────────────────────────────────────────
+async function api(method, path, body, isForm) {
+  const opts = {
+    method,
+    cache: 'no-store',
+    headers: { Authorization: token ? `Bearer ${token}` : '' }
+  };
+  if (body && !isForm) {
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(body);
+  } else if (body && isForm) {
+    opts.body = body; // FormData
+  }
+  const res = await fetch(API + path, opts);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
+
+// ── Auth ──────────────────────────────────────────────────────
+function showLogin()    { document.getElementById('auth-login-form').style.display=''; document.getElementById('auth-register-form').style.display='none'; document.getElementById('auth-totp-form').style.display='none'; }
+function showRegister() { document.getElementById('auth-register-form').style.display=''; document.getElementById('auth-login-form').style.display='none'; }
+function showTOTP()     { document.getElementById('auth-totp-form').style.display=''; document.getElementById('auth-login-form').style.display='none'; }
+
+async function doLogin() {
+  const u = document.getElementById('login-user').value.trim();
+  const p = document.getElementById('login-pass').value;
+  document.getElementById('auth-error').style.display = 'none';
+  if (!u || !p) { showErr('auth-error', 'Enter your username and password'); return; }
+  try {
+    const res = await api('POST', '/api/auth/login', { username: u, password: p });
+    if (res.needs_totp) {
+      pendingToken = res.pending_token;
+      showTOTP();
+    } else {
+      token = res.token;
+      localStorage.setItem('dmih_token', token);
+      currentUser = res.user;
+      bootApp();
+    }
+  } catch(e) {
+    showErr('auth-error', e.message);
+  }
+}
+
+// Username rule (mirrors the server): letters, digits, underscores, 3-32. Not case-sensitive.
+const USERNAME_RE = /^[A-Za-z0-9_]{3,32}$/;
+
+async function doRegister() {
+  const errBox = document.getElementById('reg-error');
+  errBox.style.display = 'none';
+  const body = {
+    username: document.getElementById('reg-user').value.trim(),
+    email: document.getElementById('reg-email').value.trim().toLowerCase(),
+    password: document.getElementById('reg-pass').value,
+  };
+  if (!USERNAME_RE.test(body.username)) {
+    showErr('reg-error', 'Username must be 3–32 characters: letters, numbers, and underscores only'); return;
+  }
+  if (!body.email || !body.email.includes('@')) { showErr('reg-error', 'Enter a valid email address'); return; }
+  if (body.password.length < 12) { showErr('reg-error', 'Password must be at least 12 characters'); return; }
+  try {
+    await api('POST', '/api/auth/register', body);
+    toast('Account created. Please sign in.', 'success');
+    showLogin();
+    // Prefill exactly what was registered so it can't be mistyped, then reset scroll/zoom state.
+    document.getElementById('login-user').value = body.username;
+    document.getElementById('login-pass').value = '';
+    document.getElementById('reg-pass').value = '';
+    window.scrollTo(0, 0);
+    document.getElementById('login-pass').focus();
+  } catch(e) {
+    showErr('reg-error', e.message);
+  }
+}
+
+// Enter key submits the visible auth form
+document.addEventListener('DOMContentLoaded', () => {
+  const enter = (ids, fn) => ids.forEach(id =>
+    document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') fn(); }));
+  enter(['login-user', 'login-pass'], doLogin);
+  enter(['reg-user', 'reg-email', 'reg-pass'], doRegister);
+  enter(['totp-code'], doTOTP);
+});
+
+async function doTOTP() {
+  const code = document.getElementById('totp-code').value.trim();
+  try {
+    const res = await api('POST', '/api/auth/totp/verify', { pending_token: pendingToken, code });
+    token = res.token;
+    localStorage.setItem('dmih_token', token);
+    const me = await api('GET', '/api/auth/me');
+    currentUser = me;
+    bootApp();
+  } catch(e) {
+    showErr('totp-error', e.message);
+  }
+}
+
+async function logout() {
+  try { await api('POST', '/api/auth/logout'); } catch(_) {}
+  token = null; currentUser = null;
+  localStorage.removeItem('dmih_token');
+  document.getElementById('auth-screen').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+}
+
+// ── Boot ──────────────────────────────────────────────────────
+function bootApp() {
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'grid';
+
+  document.getElementById('sb-username').textContent = currentUser.username;
+  document.getElementById('sb-avatar').textContent = currentUser.username[0].toUpperCase();
+  const pill = document.getElementById('sb-role-pill');
+  pill.textContent = currentUser.role;
+  pill.className = `role-pill role-${currentUser.role}`;
+  document.getElementById('stat-role').textContent = currentUser.role;
+
+  // Show admin nav items
+  if (currentUser.role === 'admin') {
+    document.getElementById('nav-admin-section').style.display = '';
+    document.getElementById('nav-users').style.display = '';
+    document.getElementById('nav-audit').style.display = '';
+  }
+  // Hide conceal for receivers
+  if (currentUser.role === 'receiver') {
+    document.getElementById('nav-conceal').style.display = 'none';
+  }
+  // Hide reveal for senders? No — senders may also reveal their own
+  loadOverviewStats();
+  loadKeyInbox();
+  initSecretSlots();
+}
+
+// ── Navigation ────────────────────────────────────────────────
+function switchSection(el) {
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  el.classList.add('active');
+  const tab = el.dataset.tab;
+  document.querySelectorAll('[id^="section-"]').forEach(s => s.style.display = 'none');
+  document.getElementById('section-' + tab).style.display = '';
+  if (tab === 'jobs' && currentUser && currentUser.role !== 'receiver') loadJobs();
+  if (tab === 'jobs' && currentUser && currentUser.role === 'receiver') {
+    document.getElementById('jobs-tbody').innerHTML =
+      '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--muted)">Job history is only available for senders and admins.</td></tr>';
+  }
+  if (tab === 'keys')  loadKeyInbox();
+  if (tab === 'users') loadUsers();
+  if (tab === 'audit') loadAudit();
+  if (tab === 'security') {
+    loadSessions();
+    document.getElementById('become-sender-card').style.display =
+      (currentUser && currentUser.role === 'receiver') ? '' : 'none';
+  }
+}
+
+// ── Overview stats ────────────────────────────────────────────
+async function loadOverviewStats() {
+  // Only sender and admin can list jobs — receivers get 403, so skip
+  if (currentUser && currentUser.role !== 'receiver') {
+    try {
+      const jobs = await api('GET', '/api/stego/jobs');
+      document.getElementById('stat-jobs').textContent = jobs.length;
+      const secrets = jobs.reduce((a, j) => a + (j.num_secrets || 0), 0);
+      document.getElementById('stat-secrets').textContent = secrets;
+    } catch(_) {
+      document.getElementById('stat-jobs').textContent = '—';
+      document.getElementById('stat-secrets').textContent = '—';
+    }
+  } else {
+    document.getElementById('stat-jobs').textContent = 'N/A';
+    document.getElementById('stat-secrets').textContent = 'N/A';
+  }
+  try {
+    const keys = await api('GET', '/api/keys/inbox');
+    document.getElementById('stat-keys').textContent = keys.length;
+  } catch(_) {}
+}
+
+// ── Secret slots ──────────────────────────────────────────────
+function initSecretSlots() {
+  secretSlots = [];
+  document.getElementById('secret-slots').innerHTML = '';
+  addSecretSlot();
+  addSecretSlot();
+}
+
+function addSecretSlot() {
+  if (secretSlots.length >= 5) return;
+  const idx = secretSlots.length;
+  secretSlots.push(null);
+  const container = document.getElementById('secret-slots');
+  const div = document.createElement('div');
+  div.id = `slot-${idx}`;
+  div.style.cssText = 'margin-bottom:10px;';
+  div.innerHTML = `
+    <div class="upload-zone" style="padding:16px 12px"
+         onclick="document.getElementById('secret-file-${idx}').click()">
+      <input type="file" id="secret-file-${idx}" accept="image/*" style="display:none"
+             onchange="handleSecretUpload(event, ${idx})"/>
+      <div style="font-size:12px;color:var(--muted)">
+        <strong style="color:var(--accent)">Secret ${idx+1}</strong> · click to select
+      </div>
+      <div class="upload-preview" id="secret-preview-${idx}" style="display:none">
+        <img id="secret-img-${idx}" style="max-height:80px;object-fit:cover;border-radius:4px"/>
+        <div class="upload-name" id="secret-name-${idx}"></div>
+      </div>
+    </div>`;
+  container.appendChild(div);
+  updateSlotCount();
+}
+
+function handleSecretUpload(e, idx) {
+  const f = e.target.files[0];
+  if (!f) return;
+  secretSlots[idx] = f;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    document.getElementById(`secret-img-${idx}`).src = ev.target.result;
+    document.getElementById(`secret-name-${idx}`).textContent = f.name;
+    document.getElementById(`secret-preview-${idx}`).style.display = '';
+  };
+  reader.readAsDataURL(f);
+  updateEmbedBtn();
+}
+
+function updateSlotCount() {
+  document.getElementById('secret-count-label').textContent =
+    `${secretSlots.length} / 5 slots`;
+  document.getElementById('add-secret-btn').disabled = secretSlots.length >= 5;
+  updateEmbedBtn();
+}
+
+function updateEmbedBtn() {
+  const filled = secretSlots.filter(Boolean).length;
+  const ok = coverFile && textureOK && filled >= 2;
+  document.getElementById('embed-btn').disabled = !ok;
+}
+
+// ── Cover upload + texture ────────────────────────────────────
+function onDragOver(e) { e.preventDefault(); e.currentTarget.classList.add('dragover'); }
+function onDropCover(e) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('dragover');
+  const f = e.dataTransfer.files[0];
+  if (f) loadCoverFile(f);
+}
+function handleCoverUpload(e) { const f = e.target.files[0]; if (f) loadCoverFile(f); }
+
+function loadCoverFile(f) {
+  coverFile = f;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    document.getElementById('cover-img').src = ev.target.result;
+    document.getElementById('cover-name').textContent = f.name;
+    document.getElementById('cover-preview').style.display = '';
+    computeTexture(ev.target.result);
+  };
+  reader.readAsDataURL(f);
+}
+
+function computeTexture(dataURL) {
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = img.width; canvas.height = img.height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    const data = ctx.getImageData(0, 0, img.width, img.height).data;
+    // Laplacian variance as texture proxy
+    let sum = 0, sumSq = 0, n = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      const g = 0.299*data[i] + 0.587*data[i+1] + 0.114*data[i+2];
+      sum += g; sumSq += g*g; n++;
+    }
+    const mean = sum / n;
+    const variance = sumSq/n - mean*mean;
+    const score = Math.min(100, Math.sqrt(variance) * 2);
+    displayTexture(score);
+  };
+  img.src = dataURL;
+}
+
+function displayTexture(score) {
+  textureOK = score >= 50;
+  const bar = document.getElementById('texture-bar');
+  bar.style.display = '';
+  document.getElementById('texture-val').textContent = score.toFixed(1);
+  document.getElementById('texture-val').className = 'texture-score ' + (textureOK ? 'score-ok' : 'score-bad');
+  const fill = document.getElementById('texture-fill');
+  fill.style.width = score + '%';
+  fill.className = 'progress-fill ' + (textureOK ? 'fill-ok' : 'fill-bad');
+  const msg = document.getElementById('texture-msg');
+  if (textureOK) {
+    msg.textContent = '✓ Cover has sufficient texture capacity';
+    msg.style.color = 'var(--accent2)';
+  } else {
+    msg.textContent = '✗ Texture too low — select a more detailed image';
+    msg.style.color = 'var(--danger)';
+  }
+  updateEmbedBtn();
+}
+
+// ── Stego upload ──────────────────────────────────────────────
+function handleStegoUpload(e) {
+  const f = e.target.files[0];
+  if (!f) return;
+  stegoFile = f;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    document.getElementById('stego-img').src = ev.target.result;
+    document.getElementById('stego-name').textContent = f.name;
+    document.getElementById('stego-preview').style.display = '';
+  };
+  reader.readAsDataURL(f);
+  document.getElementById('reveal-btn').disabled = false;
+}
+
+// ── Conceal ───────────────────────────────────────────────────
+async function doConceal() {
+  const filled = secretSlots.filter(Boolean);
+  if (!coverFile || !textureOK || filled.length < 2) return;
+  const btn = document.getElementById('embed-btn');
+  btn.disabled = true;
+  setStatus('embed-status', 'loading', 'Running DeepMIH inference…');
+
+  const fd = new FormData();
+  fd.append('cover', coverFile);
+  filled.forEach((f, i) => fd.append(`secret_${i}`, f));
+
+  try {
+    const res = await api('POST', '/api/stego/conceal', fd, true);
+    setStatus('embed-status', 'success', 'Embedding complete');
+    showConcealResult(res);
+    loadOverviewStats();
+    toast('Secrets embedded successfully', 'success');
+  } catch(e) {
+    setStatus('embed-status', 'error', e.message);
+    toast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function showConcealResult(res) {
+  const el = document.getElementById('conceal-result');
+  el.style.display = '';
+
+  // Build stego image section — shown only when server returned the image
+  const stegoSection = res.stego_image_b64 ? `
+    <div class="field">
+      <label>Stego image — download and send to receiver</label>
+      <div style="border:1px solid var(--border2);border-radius:8px;overflow:hidden;margin-top:6px">
+        <img src="${res.stego_image_b64}" style="width:100%;display:block;max-height:260px;object-fit:contain;background:#000"/>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <a href="${res.stego_image_b64}" download="stego_${res.job_id.slice(0,8)}.png"
+           class="btn btn-primary btn-sm">Download stego image</a>
+        <span style="font-size:11px;color:var(--muted);align-self:center">
+          This is the carrier image — share it openly. Keep the key secret.
+        </span>
+      </div>
+    </div>` : `
+    <div class="alert alert-warn" style="margin-bottom:12px">
+      Stego image is stored on server. Use Job ID to download via /api/stego/jobs/{id}/stego
+    </div>`;
+
+  document.getElementById('conceal-result-inner').innerHTML = `
+    <div class="alert alert-success" style="margin-bottom:12px">
+      Embedding complete · ${res.texture_score?.toFixed(1) || '—'} texture score
+    </div>
+    ${stegoSection}
+    <div class="field" style="margin-top:12px"><label>Job ID</label>
+      <div class="key-box">${res.job_id}</div>
+    </div>
+    <div class="field">
+      <label>Reveal Key ID
+        <span style="color:var(--danger);font-weight:700"> — keep this secret, share only with receiver</span>
+      </label>
+      <div class="key-box">${res.key_id}</div>
+    </div>
+    <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-secondary btn-sm" onclick="copyText('${res.key_id}')">Copy key ID</button>
+      <button class="btn btn-secondary btn-sm" onclick="showTransferDialog('${res.job_id}')">Transfer key to receiver</button>
+    </div>
+    <div id="transfer-result-${res.job_id}"></div>
+  `;
+}
+
+async function showTransferDialog(jobID) {
+  const username = prompt('Enter receiver username:');
+  if (!username) return;
+  try {
+    const res = await api('POST', `/api/keys/${jobID}/transfer`, { receiver_username: username });
+    toast(res.message, 'success');
+  } catch(e) {
+    toast(e.message, 'error');
+  }
+}
+
+// ── Reveal ────────────────────────────────────────────────────
+async function doReveal() {
+  if (!stegoFile) return;
+  const keyID = document.getElementById('reveal-key-id').value.trim();
+  if (!keyID) { toast('Enter a key ID', 'error'); return; }
+
+  const btn = document.getElementById('reveal-btn');
+  btn.disabled = true;
+  setStatus('reveal-status', 'loading', 'Decrypting key and running reveal…');
+
+  const fd = new FormData();
+  fd.append('stego', stegoFile);
+  fd.append('key_id', keyID);
+
+  try {
+    const res = await api('POST', '/api/stego/reveal', fd, true);
+    setStatus('reveal-status', 'success', 'Reveal complete');
+    showRevealResult(res);
+    toast('Secrets recovered', 'success');
+  } catch(e) {
+    setStatus('reveal-status', 'error', e.message);
+    toast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function showRevealResult(res) {
+  const el = document.getElementById('reveal-result');
+  el.style.display = '';
+
+  const secrets    = res.secrets_b64 || [];
+  const psnrs      = res.psnr_scores || [];
+  const ssims      = res.ssim_scores || [];
+  const numReal    = res.num_secrets || secrets.length;
+
+  // Slice to only real secrets — drops padding images
+  const realSecrets = secrets.slice(0, numReal);
+  const realPsnrs   = psnrs.slice(0, numReal);
+  const realSsims   = ssims.slice(0, numReal);
+
+  const hasImages = realSecrets.some(b => b && b.length > 0);
+  const hasCover  = res.cover_b64 && res.cover_b64.length > 0;
+
+  const coverCard = hasCover ? `
+    <div style="margin-bottom:20px">
+      <div class="card-title" style="margin-bottom:10px">Recovered cover image</div>
+      <div style="border:1px solid var(--border2);border-radius:8px;overflow:hidden;background:#000">
+        <img src="${res.cover_b64}"
+             style="width:100%;display:block;max-height:220px;object-fit:contain"/>
+      </div>
+      <div style="display:flex;gap:16px;margin-top:10px;flex-wrap:wrap">
+        ${res.stego_psnr ? `
+          <div class="metric-inline">
+            <span style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em">Recon PSNR</span>
+            <span style="font-size:18px;font-weight:700;color:${res.stego_psnr > 30 ? 'var(--accent2)' : res.stego_psnr > 20 ? 'var(--warn)' : 'var(--danger)'};margin-left:8px">${res.stego_psnr.toFixed(1)} dB</span>
+          </div>` : ''}
+        <a href="${res.cover_b64}" download="cover_recovered.png"
+           class="btn btn-secondary btn-sm" style="margin-left:auto">Download cover</a>
+      </div>
+    </div>` : '';
+
+  const secretTiles = realSecrets.map((b64, i) => {
+    if (!b64) return '';
+    const p     = realPsnrs[i] || 0;
+    const s     = realSsims[i] || 0;
+    const qual  = p > 35 ? 'var(--accent2)' : p > 25 ? 'var(--warn)' : 'var(--danger)';
+    const qualLabel = p > 35 ? 'Excellent' : p > 25 ? 'Good' : p > 0 ? 'Fair' : 'Recovered';
+    return `
+      <div class="img-tile">
+        <img src="${b64}"
+             style="width:100%;display:block;max-height:180px;object-fit:contain;background:#000"/>
+        <div class="img-tile-label">Secret ${i+1}</div>
+        <div style="padding:4px 10px 2px;display:flex;justify-content:space-between;align-items:center">
+          ${p > 0 ? `
+            <span style="font-size:13px;font-weight:700;color:${qual}">${p.toFixed(1)} dB</span>
+            <span style="font-size:10px;color:var(--muted)">${qualLabel}</span>` :
+            `<span style="font-size:11px;color:var(--muted)">Recovered</span>`}
+        </div>
+        ${s > 0 ? `
+          <div style="padding:0 10px 6px">
+            <div style="height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden">
+              <div style="height:100%;width:${Math.min(100,s*100).toFixed(0)}%;background:${qual};border-radius:2px"></div>
+            </div>
+            <div style="font-size:9px;color:var(--muted);margin-top:3px">SSIM: ${s.toFixed(3)}</div>
+          </div>` : ''}
+        <div style="padding:0 8px 8px">
+          <a href="${b64}" download="secret_${i+1}_recovered.png"
+             class="btn btn-secondary btn-sm"
+             style="width:100%;justify-content:center;font-size:11px">
+            Download
+          </a>
+        </div>
+      </div>`;
+  }).join('');
+
+  const validPsnrs = realPsnrs.filter(p => p > 0);
+  const avgPsnr    = validPsnrs.length > 0
+    ? validPsnrs.reduce((a,b) => a+b, 0) / validPsnrs.length : 0;
+  const metricBar  = validPsnrs.length > 0 ? `
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;padding:12px;
+                background:rgba(0,0,0,0.2);border-radius:8px;border:1px solid var(--border)">
+      <div>
+        <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em">Avg Secret PSNR</div>
+        <div style="font-size:20px;font-weight:700;color:${avgPsnr>35?'var(--accent2)':avgPsnr>25?'var(--warn)':'var(--danger)'}">
+          ${avgPsnr.toFixed(1)} dB
+        </div>
+      </div>
+      <div>
+        <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em">Secrets Recovered</div>
+        <div style="font-size:20px;font-weight:700;color:var(--text)">${realSecrets.filter(b=>b).length}</div>
+      </div>
+      <div>
+        <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em">Quality</div>
+        <div style="font-size:13px;font-weight:600;color:${avgPsnr>35?'var(--accent2)':avgPsnr>25?'var(--warn)':'var(--danger)'}">
+          ${avgPsnr>35?'Excellent — lossless':avgPsnr>25?'Good — minor artefacts':avgPsnr>15?'Fair — visible loss':'Poor — check model'}
+        </div>
+      </div>
+    </div>` : '';
+
+  document.getElementById('reveal-result-inner').innerHTML = `
+    <div class="alert alert-success" style="margin-bottom:14px">
+      Secrets recovered · Job ID: ${res.job_id.slice(0,16)}…
+    </div>
+    ${coverCard}
+    ${metricBar}
+    ${!hasImages ? `
+      <div class="alert alert-warn">
+        Images were recovered on the server but could not be returned inline.
+      </div>` : `
+      <div class="card-title" style="margin-bottom:10px">Recovered secret images</div>
+      <div class="img-grid">${secretTiles}</div>
+    `}`;
+}
+
+// ── Jobs ──────────────────────────────────────────────────────
+async function loadJobs() {
+  if (currentUser && currentUser.role === 'receiver') return;
+  try {
+    const jobs = await api('GET', '/api/stego/jobs');
+    const tb = document.getElementById('jobs-tbody');
+    if (!jobs.length) { tb.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--muted)">No jobs yet</td></tr>`; return; }
+    tb.innerHTML = jobs.map(j => `
+      <tr>
+        <td style="font-family:monospace;font-size:11px">${j.id.slice(0,12)}…</td>
+        <td>${j.operation}</td>
+        <td>${j.num_secrets || '—'}</td>
+        <td>${j.texture_score?.toFixed(1) || '—'}</td>
+        <td><span class="badge badge-${j.status}">${j.status}</span></td>
+        <td>${new Date(j.created_at).toLocaleString()}</td>
+      </tr>`).join('');
+  } catch(e) { toast(e.message,'error'); }
+}
+
+// ── Key inbox ─────────────────────────────────────────────────
+async function loadKeyInbox() {
+  try {
+    const keys = await api('GET', '/api/keys/inbox');
+    document.getElementById('stat-keys').textContent = keys.length;
+    const tb = document.getElementById('keys-tbody');
+    if (!keys.length) { tb.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--muted)">No keys received yet</td></tr>`; return; }
+    tb.innerHTML = keys.map(k => `
+      <tr>
+        <td style="font-family:monospace;font-size:11px">${k.id.slice(0,12)}…</td>
+        <td style="font-family:monospace;font-size:11px">${k.job_id.slice(0,12)}…</td>
+        <td>${new Date(k.created_at).toLocaleString()}</td>
+        <td>
+          <button class="btn btn-secondary btn-sm" onclick="useKey('${k.id}')">Use for reveal</button>
+          <button class="btn btn-secondary btn-sm" onclick="copyText('${k.id}')">Copy</button>
+        </td>
+      </tr>`).join('');
+
+    // Also show in reveal section
+    const inboxList = document.getElementById('inbox-keys-list');
+    if (keys.length) {
+      inboxList.innerHTML = `<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Or pick from inbox:</div>` +
+        keys.map(k => `<button class="btn btn-secondary btn-sm" style="margin:3px" onclick="useKey('${k.id}')">${k.id.slice(0,14)}…</button>`).join('');
+    }
+  } catch(_) {}
+}
+
+function useKey(keyID) {
+  document.getElementById('reveal-key-id').value = keyID;
+  switchSection(document.querySelector('[data-tab="reveal"]'));
+  toast('Key loaded. Upload a stego image and click Reveal.', 'info');
+}
+
+// ── Admin ─────────────────────────────────────────────────────
+async function loadUsers() {
+  try {
+    const users = await api('GET', '/api/admin/users');
+    const tb = document.getElementById('users-tbody');
+    tb.innerHTML = users.map(u => `
+      <tr>
+        <td>${u.id}</td>
+        <td style="font-weight:600;color:#fff">${u.username}</td>
+        <td style="color:var(--muted)">${u.email}</td>
+        <td>
+          <select onchange="changeRole(${u.id}, this.value)" style="background:var(--surface);border:1px solid var(--border2);color:var(--text);border-radius:5px;padding:3px 6px;font-size:11px">
+            ${['sender','receiver','admin'].map(r => `<option${u.role===r?' selected':''}>${r}</option>`).join('')}
+          </select>
+        </td>
+        <td><span style="color:${u.active?'var(--accent2)':'var(--danger)'}">${u.active?'Active':'Disabled'}</span></td>
+        <td style="color:var(--muted);font-size:11px">${new Date(u.created_at).toLocaleDateString()}</td>
+        <td>
+          <button class="btn btn-danger btn-sm" onclick="deactivateUser(${u.id})">Disable</button>
+        </td>
+      </tr>`).join('');
+  } catch(e) { toast(e.message,'error'); }
+}
+
+async function changeRole(uid, role) {
+  try {
+    await api('PUT', `/api/admin/users/${uid}/role`, { role });
+    toast(`Role updated to ${role}`, 'success');
+  } catch(e) { toast(e.message,'error'); }
+}
+
+async function deactivateUser(uid) {
+  if (!confirm('Disable this user?')) return;
+  try {
+    await api('DELETE', `/api/admin/users/${uid}`);
+    loadUsers();
+    toast('User disabled', 'success');
+  } catch(e) { toast(e.message,'error'); }
+}
+
+async function loadAudit() {
+  try {
+    const entries = await api('GET', '/api/admin/audit');
+    const tb = document.getElementById('audit-tbody');
+    if (!entries.length) { tb.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--muted)">No entries</td></tr>`; return; }
+    tb.innerHTML = entries.map(e => `
+      <tr>
+        <td style="color:var(--muted);font-size:11px">${new Date(e.CreatedAt).toLocaleString()}</td>
+        <td>${e.UserID}</td>
+        <td><span class="badge" style="background:rgba(47,128,237,0.1);color:#5ba3f5">${e.Action}</span></td>
+        <td style="font-family:monospace;font-size:10px;color:var(--muted)">${e.Detail || '—'}</td>
+        <td style="font-size:11px;color:var(--muted)">${e.IP}</td>
+      </tr>`).join('');
+  } catch(e) { toast(e.message,'error'); }
+}
+
+// ── Sessions ──────────────────────────────────────────────────
+async function loadSessions() {
+  try {
+    const sessions = await api('GET', '/api/auth/sessions');
+    const el = document.getElementById('sessions-list');
+    if (!sessions.length) { el.innerHTML = '<p style="font-size:12px;color:var(--muted)">No active sessions</p>'; return; }
+    el.innerHTML = sessions.map(s => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px">
+        <div>
+          <div style="color:var(--text)">${s.ip}</div>
+          <div style="color:var(--muted);font-size:10px">${s.user_agent?.slice(0,40)}… · ${new Date(s.expires_at).toLocaleString()}</div>
+        </div>
+        <button class="btn btn-danger btn-sm" onclick="revokeSession('${s.session_id}')">Revoke</button>
+      </div>`).join('');
+  } catch(e) {}
+}
+
+async function revokeSession(sid) {
+  try { await api('DELETE', `/api/auth/sessions/${sid}`); loadSessions(); toast('Session revoked','success'); }
+  catch(e) { toast(e.message,'error'); }
+}
+
+// ── Role self-upgrade ────────────────────────────────────────
+async function becomeSender() {
+  if (!confirm('Switch this account to sender? This cannot be undone yourself — only an admin could move you back.')) return;
+  try {
+    const updated = await api('POST', '/api/auth/become-sender');
+    currentUser = updated;
+    toast('You are now a sender.', 'success');
+    document.getElementById('become-sender-card').style.display = 'none';
+    document.getElementById('nav-conceal').style.display = '';
+    bootApp();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ── TOTP setup ────────────────────────────────────────────────
+async function startTOTPSetup() {
+  try {
+    const res = await api('POST', '/api/auth/totp/setup');
+    document.getElementById('totp-setup-area').style.display = 'none';
+    document.getElementById('totp-qr-area').style.display = '';
+    // Generate QR via API
+    const qrURL = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(res.QRURL)}`;
+    document.getElementById('totp-qr-img').src = qrURL;
+    document.getElementById('totp-secret-text').textContent = res.Secret;
+  } catch(e) { toast(e.message,'error'); }
+}
+
+async function confirmTOTPSetup() {
+  const code = document.getElementById('totp-confirm-code').value.trim();
+  try {
+    await api('POST', '/api/auth/totp/setup', { code }); // simplified — confirm endpoint
+    toast('TOTP enabled successfully', 'success');
+    document.getElementById('totp-qr-area').style.display = 'none';
+    document.getElementById('totp-setup-area').style.display = '';
+    document.getElementById('totp-setup-area').innerHTML = '<div class="alert alert-success">✓ Two-factor authentication is active</div>';
+  } catch(e) { toast(e.message,'error'); }
+}
+
+// ── UI helpers ────────────────────────────────────────────────
+function showErr(id, msg) {
+  const el = document.getElementById(id);
+  el.style.display = ''; el.textContent = msg;
+}
+
+function setStatus(id, type, msg) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const icon = type === 'loading' ? '<div class="spinner"></div>' :
+               type === 'success' ? '✓' : '✗';
+  el.innerHTML = `<div class="alert alert-${type==='loading'?'info':type==='success'?'success':'danger'}"
+    style="display:flex;gap:8px;align-items:center">${icon} ${msg}</div>`;
+}
+
+function copyText(text) {
+  navigator.clipboard.writeText(text).then(() => toast('Copied to clipboard', 'success'));
+}
+
+function toast(msg, type = 'info') {
+  const c = document.getElementById('toast-container');
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.innerHTML = `<span style="flex:1">${msg}</span>`;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), 4000);
+}
+
+// ── Init ──────────────────────────────────────────────────────
+(async () => {
+  if (token) {
+    try {
+      const me = await api('GET', '/api/auth/me');
+      currentUser = me;
+      bootApp();
+    } catch(_) {
+      // Token expired or invalid — clear it and show login
+      localStorage.removeItem('dmih_token');
+      token = null;
+      document.getElementById('auth-screen').style.display = 'flex';
+    }
+  } else {
+    document.getElementById('auth-screen').style.display = 'flex';
+  }
+})();
+</script>
+</body>
+</html>
